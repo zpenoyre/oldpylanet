@@ -17,6 +17,7 @@ Hello pworld
 # Data
 - instrumental detrending
 - astrophysical detrending
+  - phasma
   - gaussian processes
   - autocorrelation analysis
 - model fitting
