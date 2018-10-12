@@ -18,6 +18,7 @@ Hello pworld
 - instrumental detrending
 - astrophysical detrending
   - phasma
+  - polynomia
   - gaussian processes
   - autocorrelation analysis
 - model fitting
