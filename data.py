@@ -8,114 +8,163 @@ import glob
 from astropy.io import fits
 
 class keplerLC(object):
-    def __init__(self, KIC, LCdirectory, **kwargs):
+    def __init__(self, KIC, LCdirectory, cadence="both"):
         self.KIC = KIC
         self.LCdirectory = LCdirectory
-        self._LCfilelist = None
-        self._cadence = None
+        self.LCfilelist = []
+        self.cadence = cadence
         self._times = None
-        self._fluxs = None
-        self._fluxerrs = None
-        self._qualitys = None
+        self._cadencenos = None
+        self._sap_fluxs = None
+        self._sap_flux_errs = None
+        self._sap_bkgs = None
+        self._sap_bkg_errs = None
+        self._pdcsap_fluxs = None
+        self._pdcsap_flux_errs = None
+        self._sap_qualitys = None
+        self._psf_centr1s = None
+        self._psf_centr1_errs = None
+        self._psf_centr2s = None
+        self._psf_centr2_errs = None
+        
+        #get list of LC fits files
+        for lcName in os.listdir(self.LCdirectory):
+            if (str(self.KIC) not in lcName) or not lcName.endswith(".fits"):
+                pass
+            else:
+                if self.cadence == "short":
+                    #print("short-cadence only")
+                    if lcName[-8:] == "slc.fits":
+                        self.LCfilelist.append(lcName)
 
-        allowed_keys = ["LCfilelist","cadence","times","fluxs","fluxerrs","qualitys"]
-        
-        
-        
-        #update with values passed in kwargs. values not passed in kwargs will remain None
-        self.__dict__.update((k,v) for k,v in kwargs.iteritems() if k in allowed_keys)
-        
-
-    @property
-    def LCfilelist(self):
-        """ Get list of LC .fits files. """
-        if self._LCfilelist is None:
-            self._LCfilelist = []
-            for lcName in os.listdir(self.LCdirectory):
-                if (str(self.KIC) not in lcName) or not lcName.endswith(".fits"):
-                    pass
+                elif self.cadence == "long":
+                    #print("long-cadence only")
+                    if lcName[-8:] == "llc.fits":
+                        self.LCfilelist.append(lcName)
                 else:
-                    if self._cadence == "short":
-                        if lcName[-8:] == "slc.fits":
-                            self._LCfilelist.append(lcName)
+                    #print("both cadences")
+                    self.LCfilelist.append(lcName)
 
-                    elif self._cadence == "long":
-                        if lcName[-8:] == "llc.fits":
-                            self._LCfilelist.append(lcName)
-                    else:
-                        self._LCfilelist.append(lcName)
+        #sort LC file names by date
+        self.dates = []
+        for lc in self.LCfilelist:
+            self.dates.append(int(lc[14:-9]))
 
-            dates = []
-            for lc in self._LCfilelist:
-                dates.append(int(lc[14:-9]))
+        self.dates = np.array(self.dates)
+        dateIdxs = np.argsort(self.dates)
 
-            dates = np.array(dates)
-            dateIdxs = np.argsort(dates)
-
-            self._LCfilelist = np.array(self._LCfilelist)[dateIdxs]
+        self.LCfilelist = np.array(self.LCfilelist)[dateIdxs]
         
-        return self._LCfilelist
+    def getHDUdata(self, hdu_key):
+        dataList = []
+        for lc in self.LCfilelist:
+            with fits.open(self.LCdirectory+'/'+lc, memmap=False) as f:
+                # The lightcurve data are in the first FITS HDU.
+                hdu_data = f[1].data
+                dataList.append(hdu_data[hdu_key])
+
+        return dataList
 
     @property
     def times(self):
         """ Get list of time arrays """
         if self._times is None:
-            self._times = []
-            for lc in self.LCfilelist:
-                f = fits.open(self.LCdirectory+'/'+lc)
-
-                # The lightcurve data are in the first FITS HDU.
-                hdu_data = f[1].data
-                self._times.append(hdu_data["time"])
-                f.close()
-            
+            self._times = self.getHDUdata("time")
         return self._times
 
     @property
-    def fluxs(self):
-        """ Get list of SAP flux arrays """
-        if self._fluxs is None:
-            self._fluxs = []
-            for lc in self.LCfilelist:
-                f = fits.open(self.LCdirectory+'/'+lc)
-
-                # The lightcurve data are in the first FITS HDU.
-                hdu_data = f[1].data
-                self._fluxs.append(hdu_data["sap_flux"])
-                f.close()
-            
-        return self._fluxs
+    def cadencenos(self):
+        """ Get list of cadenceno arrays """
+        if self._cadencenos is None:
+            self._cadencenos = self.getHDUdata("cadenceno")
+        return self._cadencenos
 
     @property
-    def fluxerrs(self):
-        """ Get list of SAP flux err arrays """
-        if self._fluxerrs is None:
-            self._fluxerrs = []
-            for lc in self.LCfilelist:
-                f = fits.open(self.LCdirectory+'/'+lc)
-
-                # The lightcurve data are in the first FITS HDU.
-                hdu_data = f[1].data
-                self._fluxerrs.append(hdu_data["sap_flux_err"])
-                f.close()
-            
-        return self._fluxerrs
+    def sap_fluxs(self):
+        """ Get list of sap_flux arrays """
+        if self._sap_fluxs is None:
+            self._sap_fluxs = self.getHDUdata("sap_flux")
+        return self._sap_fluxs
 
     @property
-    def qualitys(self):
-        """ Get list of data quality flag arrays """
-        if self._qualitys is None:
-            self._qualitys = []
-            for lc in self.LCfilelist:
-                f = fits.open(self.LCdirectory+'/'+lc)
+    def sap_flux_errs(self):
+        """ Get list of sap_flux_err arrays """
+        if self._sap_flux_errs is None:
+            self._sap_flux_errs = self.getHDUdata("sap_flux_err")
+        return self._sap_flux_errs
 
-                # The lightcurve data are in the first FITS HDU.
-                hdu_data = f[1].data
-                self._qualitys.append(hdu_data["sap_quality"])
-                f.close()
-            
-        return self._qualitys
+    @property
+    def sap_bkgs(self):
+        """ Get list of sap_bkg arrays """
+        if self._sap_bkgs is None:
+            self._sap_bkgs = self.getHDUdata("sap_bkg")
+        return self._sap_bkgs
 
+    @property
+    def sap_bkg_errs(self):
+        """ Get list of sap_bkg_err arrays """
+        if self._sap_bkg_errs is None:
+            self._sap_bkg_errs = self.getHDUdata("sap_bkg_err")
+        return self._sap_bkg_errs
+
+    @property
+    def pdcsap_fluxs(self):
+        """ Get list of pdcsap_flux arrays """
+        if self._pdcsap_fluxs is None:
+            self._pdcsap_fluxs = self.getHDUdata("pdcsap_flux")
+        return self._pdcsap_fluxs
+
+    @property
+    def pdcsap_flux_errs(self):
+        """ Get list of pdcsap_flux_err arrays """
+        if self._pdcsap_flux_errs is None:
+            self._pdcsap_flux_errs = self.getHDUdata("pdcsap_flux_err")
+        return self._pdcsap_flux_errs
+
+    @property
+    def sap_qualitys(self):
+        """ Get list of sap_quality arrays """
+        if self._sap_qualitys is None:
+            self._sap_qualitys = self.getHDUdata("sap_quality")
+        return self._sap_qualitys
+
+    @property
+    def psf_centr1s(self):
+        """ Get list of psf_centr1 arrays """
+        if self._psf_centr1s is None:
+            self._psf_centr1s = self.getHDUdata("psf_centr1")
+        return self._psf_centr1s
+
+    @property
+    def psf_centr1_errs(self):
+        """ Get list of psf_centr1_err arrays """
+        if self._psf_centr1_errs is None:
+            self._psf_centr1_errs = self.getHDUdata("psf_centr1_err")
+        return self._psf_centr1_errs
+
+    @property
+    def psf_centr2s(self):
+        """ Get list of psf_centr2 arrays """
+        if self._psf_centr2s is None:
+            self._psf_centr2s = self.getHDUdata("psf_centr2")
+        return self._psf_centr2s
+
+    @property
+    def psf_centr2_errs(self):
+        """ Get list of psf_centr2_err arrays """
+        if self._psf_centr2_errs is None:
+            self._psf_centr2_errs = self.getHDUdata("psf_centr2_err")
+        return self._psf_centr2_errs
+
+    def plotLC(self, **kwargs):
+        """ Plot flux vs. time"""
+        fig=plt.figure(figsize=(8,6))
+        plt.plot(np.hstack(self.times),
+            (np.hstack(self.sap_fluxs)/np.nanmean(np.hstack(self.sap_fluxs))),
+            'k.',
+            alpha=0.25)
+        plt.show()
+        return fig
 
 def downloadKepler(KIC, dataDirectory):
     """Download Kepler data for a target.
@@ -167,14 +216,14 @@ def downloadKepler(KIC, dataDirectory):
 
     return
 
-def getData(target, dataFolderPath, readInCadence="both", plot=True):
+def getData(target, dataFolderPath, cadence="both", plot=True):
     """Combines the functionality of download and readIn, below.
     Args:
         (float, int, or str): The target to download.
             Can be a KOI number (float), KIC (int), or Kepler planet name (str).
         dataFolderPath(str): The relative path to the folder where the target's 
             light curve fits files (a) already are or (b) will be downloaded.
-        readInCadence ("short","long","both"): Read in only short-cadence data,
+        cadence ("short","long","both"): Read in only short-cadence data,
             only long-cadence data, or both?
         plot (bool): Plot the read-in data, or no?
 
@@ -213,56 +262,6 @@ def getData(target, dataFolderPath, readInCadence="both", plot=True):
     if nDataFiles==0:
         downloadKepler(KIC, dataDirectory)
     
-    return keplerLC(KIC, dataDirectory)
+    print("cadence is {0}".format(cadence))
+    return keplerLC(KIC, dataDirectory, cadence)
 
-    """
-    lcs = []
-
-    
-    for lcName in os.listdir(dataDirectory):
-        if (str(KIC) not in lcName) or not lcName.endswith(".fits"):
-            pass
-        else:
-            if readInCadence == "short":
-                if lcName[-8:] == "slc.fits":
-                    lcs.append(lcName)
-
-            elif readInCadence == "long":
-                if lcName[-8:] == "llc.fits":
-                    lcs.append(lcName)
-            else:
-                lcs.append(lcName)
-
-    dates = []
-    for lc in lcs:
-        dates.append(int(lc[14:-9]))
-
-    dates = np.array(dates)
-    dateIdxs = np.argsort(dates)
-
-    lcs = np.array(lcs)[dateIdxs]
-    
-    # Loop over the datasets and read in the data.
-    time, flux, ferr, quality = [], [], [], []
-    for lc in lcs:
-        f = fits.open(dataDirectory+'/'+lc)
-
-        # The lightcurve data are in the first FITS HDU.
-        hdu_data = f[1].data
-
-        time.append(hdu_data["time"])
-        flux.append(hdu_data["sap_flux"])
-        ferr.append(hdu_data["sap_flux_err"])
-        quality.append(hdu_data["sap_quality"])
-        f.close()
-
-    firstObs=0
-    lastObs=len(time)-1
-    
-    if plot is True:
-        firstPlot=plt.gca()
-        firstPlot.plot(np.hstack(time[firstObs:lastObs+1]),(np.hstack(flux[firstObs:lastObs+1])/np.nanmean(np.hstack(flux[firstObs:lastObs+1])))-1,'k.',alpha=0.25)
-        plt.show()
-
-    return time, flux, ferr, quality
-    """
