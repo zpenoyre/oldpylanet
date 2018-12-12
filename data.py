@@ -336,7 +336,7 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1):
         es=errors[windowWidth:-windowWidth] # do we want to try and find the error in the median?
         indices=np.array([np.arange(i,i+2*windowWidth) for i in range(nObs-2*windowWidth)])
         fMed=np.median(fluxs[indices],axis=1)
-        eMed=np.median(np.abs(fs-fMed))
+        eMed=1.4826*np.median(np.abs(fs-fMed))/np.sqrt(2*windowWidth)
         #print(np.max(indices))
         #print(indices.shape)
         #print(fs.size)
@@ -384,11 +384,11 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1):
         #print(0.5*period/cadence)
         halfWidth=int(0.5*(period/cadence))
         #print('halfWidth: ',halfWidth)
-        sinTerm=fs-0.5*(fluxs[halfWidth:-windowWidth-halfWidth-1]+fluxs[windowWidth+halfWidth:-halfWidth-1])
+        sinTerm=fs-0.5*(fluxs[0:-2*windowWidth]+fluxs[2*windowWidth:])
         fMed=cosTerm+sinTerm
         #print('fs.size: ',fluxs[0:-2*windowWidth].size)
         #print('fluxs[medianIndices].size: ',fluxs[2*windowWidth:].size)
-        eMed=np.median(np.abs(fs-fMed))
+        eMed=1.4826*np.median(np.abs(fs-fMed))/np.sqrt(2*windowWidth)
         return ts,fs-fMed,np.sqrt(es**2 + eMed**2)
         
 
@@ -399,19 +399,22 @@ def cleanData(ts,fs,es,period,nMin=1000,cadence=-1,detrendMethod='box'):
     allFs=np.array([])
     allEs=np.array([])
     for i in range(nPeriods):
-        pTs,pFs,pEs=detrend(times[i],fluxs[i],errors[i],period,method=detrendMethod,cadence=cadence)
+        meanFlux=np.mean(fluxs[i]) # normalise fluxs centred around 1
+        pTs,pFs,pEs=detrend(times[i],fluxs[i]/meanFlux,errors[i]/meanFlux,period,method=detrendMethod,cadence=cadence)
         allTs=np.hstack([allTs,pTs])
         allFs=np.hstack([allFs,pFs])
         allEs=np.hstack([allEs,pEs])
     return allTs,allFs,allEs
     
-def stackData(ts,fs,es,period,nTs=100,offset=0):
+def stackData(ts,fs,es,period,nTs=100,offset=0.1234):
     dt=period/(nTs+1)
-    binTs=np.arange(dt/2,period-dt/2,dt+1e-6)
+    binTs=np.arange(-(period-dt)/2,(period-dt)/2,dt)
     binFs=np.zeros(nTs)
     binEs=np.zeros(nTs)
+    if offset==0.1234:
+        offset=ts[np.argmin(fs)]
     for i in range(nTs):
-        inBin=np.flatnonzero(np.abs(((ts-offset)%period)-binTs[i])<dt/2)
+        inBin=np.flatnonzero(np.abs(((ts+(period/2)-offset)%period - period/2)-binTs[i])<dt/2)
         binFs[i]=np.median(fs[inBin])
         binEs[i]=1.4826*np.median(np.abs(fs[inBin]-binFs[i]))/np.sqrt(inBin.size)
     return binTs,binFs,binEs
