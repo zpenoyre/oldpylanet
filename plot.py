@@ -28,10 +28,17 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     darkBlue='#05668D'
     lightBlue='#427AA1'
     offWhite='#EBF2FA'
+    
+    # finds minimum data point and assumes it;s the transit middle
+    offset=ts[np.argmin(fs)]
+    ts=(ts-offset+period/2)%period - period/2 
+    
     if period==-1:
         period=np.max(ts)-np.min(ts) #almost true...
     sort=np.argsort(ts)
     nTs=sort.size
+    
+    
     fullTs=np.hstack([ts[sort[-int(nTs/4):]]-period,ts,period+ts[sort[:int(nTs/4)]]])
     fullFs=np.hstack([fs[sort[-int(nTs/4):]],fs,fs[sort[:int(nTs/4)]]])
     fullEs=np.hstack([es[sort[-int(nTs/4):]],es,es[sort[:int(nTs/4)]]])

@@ -8,11 +8,12 @@ import glob
 from astropy.io import fits
 
 class keplerLC(object):
-    def __init__(self, KIC, LCdirectory, cadence="both"):
+    def __init__(self, KIC, LCdirectory, period, cadence="both"):
         self.KIC = KIC
         self.LCdirectory = LCdirectory
         self.LCfilelist = []
         self.cadence = cadence
+        self.period=period
         self._times = None
         self._cadencenos = None
         self._sap_fluxs = None
@@ -202,7 +203,8 @@ def downloadKepler(KIC, dataDirectory):
     #list to hold names of long cadence light curve fits files
     n_lcs = 0
     for i,fileToDownload in enumerate(fileNames):
-        print('downloading file ',i,' of ',len(fileNames))
+        if i%5==0:
+            print('downloading file ',i,' of ',len(fileNames))
         targetFile = ftpfolder+fileToDownload
         #print targetFile
         lcName = dataDirectory+'/'+fileToDownload
@@ -263,8 +265,10 @@ def getData(target, dataFolderPath, cadence="both", plot=True):
     if nDataFiles==0:
         downloadKepler(KIC, dataDirectory)
     
+    period=target.koi_period
     print("cadence is {0}".format(cadence))
-    return keplerLC(KIC, dataDirectory, cadence)
+    print("period is {0}".format(period))
+    return keplerLC(KIC, dataDirectory, period, cadence)
 
 # lots of nans in kepler data, this will find them and either approximate the value or cut our losses and split the observing period up
 # nMin can be used to specify the number of data points below which we won't bother keeping the data (i.e. if it's less than a full period)
@@ -331,6 +335,8 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1):
     #print('cadence: ',cadence)
     if method=='box':
         windowWidth=int(0.5*period/cadence)
+        if nObs<2*windowWidth:
+            return np.array([]),np.array([]),np.array([])
         ts=times[windowWidth:-windowWidth]
         fs=fluxs[windowWidth:-windowWidth]
         es=errors[windowWidth:-windowWidth] # do we want to try and find the error in the median?
@@ -346,13 +352,23 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1):
         window=np.hstack([np.arange(int(windowSize/2)+1),np.arange(int(windowSize/2),0,-1)])
         window=window/np.sum(window)
     if method=='castle':
-        windowWidth=int(period/cadence)
-        ts=times[windowWidth:-windowWidth]
-        fs=fluxs[windowWidth:-windowWidth]
-        es=errors[windowWidth:-windowWidth] # do we want to try and find the error in the median?
+        windowSize=6*int(period/cadence)+1 # always odd
+        windowWidth=int(windowSize/2)
+        if nObs<windowSize:
+            return np.array([]),np.array([]),np.array([])
+        nData=nObs-windowSize # number of usable data points
+        ts=times[1+windowWidth:-windowWidth]
+        fs=fluxs[1+windowWidth:-windowWidth]
+        es=errors[1+windowWidth:-windowWidth] # do we want to try and find the error in the median?
+        #print('nData: ',nData)
+        #print('fs.size: ',fs.size)
         
         #setting up the weighting function
+        #print('windowSize: ',windowSize)
         Ts=np.arange(-windowWidth,windowWidth+1)
+        #print('windowWidth: ',windowWidth)
+        #print(np.max(Ts))
+        #print(np.min(Ts))
         #print('nObs: ',nObs)
         #print('windowWidth: ',windowWidth)
         #print('Ts.size: ',Ts.size)
@@ -360,10 +376,13 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1):
         nans=np.flatnonzero(~np.isfinite(sinc)) # should be single nan at sinc(0) - numpy can't handle this...
         sinc[nans]=1
         weights=sinc/((0.5*windowWidth)**2 - Ts**2)
+        wNans=np.flatnonzero(~np.isfinite(weights))
+        weights[wNans]=1
         weightSum=np.sum(weights)
         weights=weights/weightSum
-        
-        indices=np.array([np.arange(i,i+2*windowWidth) for i in range(nObs-2*windowWidth)])
+        #print(windowWidth)
+        #print(nObs)
+        indices=np.array([np.arange(i,i+windowSize) for i in range(nData)])
         #print('indices.shape: ',indices.shape)
         #print('max index: ',np.max(indices))
         argsort=np.argsort(fluxs[indices],axis=1)
@@ -382,15 +401,34 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1):
         #print('medianIndices: ',medianIndices)
         cosTerm=fluxs[medianIndices]
         #print(0.5*period/cadence)
-        halfWidth=int(0.5*(period/cadence))
+        halfWidth=int((period/cadence))
         #print('halfWidth: ',halfWidth)
-        sinTerm=fs-0.5*(fluxs[0:-2*windowWidth]+fluxs[2*windowWidth:])
-        fMed=cosTerm+sinTerm
+        sinTerm=fs-0.5*(fluxs[1+windowWidth-halfWidth:1+windowWidth-halfWidth+nData]+fluxs[1+windowWidth+halfWidth:1+windowWidth+halfWidth+nData])
+        fMed=cosTerm#+sinTerm
         #print('fs.size: ',fluxs[0:-2*windowWidth].size)
         #print('fluxs[medianIndices].size: ',fluxs[2*windowWidth:].size)
-        eMed=1.4826*np.median(np.abs(fs-fMed))/np.sqrt(2*windowWidth)
+        eMed=1.4826*np.median(np.abs(fs-fMed))/np.sqrt(windowSize)
         return ts,fs-fMed,np.sqrt(es**2 + eMed**2)
+    if method=='double':
+        times,fluxs,errors=detrend(times,fluxs,errors,period,method='box',cadence=-1) # initially detrends out the low frequency noise
+        windowSize=2*int(0.5*period/cadence)+1 # always odd
+        windowWidth=int(windowSize/2)
+        if nObs<windowSize:
+            return np.array([]),np.array([]),np.array([])
+        ts=times#[windowWidth:-windowWidth]
+        #fs=fluxs[windowWidth:-windowWidth]
+        es=errors#[windowWidth:-windowWidth]
         
+        #print('window size: ',windowSize)
+        #print('window width: ',windowWidth)
+        fs=np.zeros_like(fluxs)
+        fs[windowWidth:-windowWidth]=0.5*(fluxs[:-windowSize+1]+fluxs[windowSize-1:])
+        fs[:windowWidth+1]=fluxs[windowWidth:windowSize]
+        fs[-windowWidth:]=fluxs[-windowSize+1:-windowWidth]
+        #print(np.flatnonzero(fs==0))
+        #print(ts.size)
+        
+        return ts,fs,es
 
 def cleanData(ts,fs,es,period,nMin=1000,cadence=-1,detrendMethod='box'):
     times,fluxs,errors=cleanGaps(ts,fs,es,nMin=nMin)
@@ -399,23 +437,46 @@ def cleanData(ts,fs,es,period,nMin=1000,cadence=-1,detrendMethod='box'):
     allFs=np.array([])
     allEs=np.array([])
     for i in range(nPeriods):
-        meanFlux=np.mean(fluxs[i]) # normalise fluxs centred around 1
+        meanFlux=np.median(fluxs[i]) # normalise fluxs centred around 1
         pTs,pFs,pEs=detrend(times[i],fluxs[i]/meanFlux,errors[i]/meanFlux,period,method=detrendMethod,cadence=cadence)
         allTs=np.hstack([allTs,pTs])
         allFs=np.hstack([allFs,pFs])
         allEs=np.hstack([allEs,pEs])
+    #medianFs=np.median(allFs)
+    #allFs=(allFs/medianFs)-1
+    #allEs=allEs/medianFs
     return allTs,allFs,allEs
-    
+
+def weightedMedian(xs,ws):
+    argsort=np.argsort(xs)
+    w=np.sum(ws)
+    cumsum=np.cumsum(ws[argsort]/w)
+    medianIndex=argsort[np.argmin(np.abs(cumsum-0.5))]
+    return xs[medianIndex]    
+
 def stackData(ts,fs,es,period,nTs=100,offset=0.1234):
     dt=period/(nTs+1)
-    binTs=np.arange(-(period-dt)/2,(period-dt)/2,dt)
+    binTs=np.arange(-(period-dt)/2,(period-dt)/2,dt+1e-6)
     binFs=np.zeros(nTs)
     binEs=np.zeros(nTs)
-    if offset==0.1234:
-        offset=ts[np.argmin(fs)]
+    #if offset==0.1234:
+    #    offset=ts[np.argmin(fs)]
     for i in range(nTs):
-        inBin=np.flatnonzero(np.abs(((ts+(period/2)-offset)%period - period/2)-binTs[i])<dt/2)
-        binFs[i]=np.median(fs[inBin])
-        binEs[i]=1.4826*np.median(np.abs(fs[inBin]-binFs[i]))/np.sqrt(inBin.size)
+        #inBin=np.flatnonzero(np.abs(((ts+(period/2)-offset)%period - period/2)-binTs[i])<dt/2)
+        inBin=np.flatnonzero(np.abs(((ts+(period/2))%period - period/2)-binTs[i])<dt/2)
+        #argsort=np.argsort(fs[inBin])
+        #w=np.sum(1/es[inBin])
+        #w_i=1/es[inBin[argsort]]
+        #cumsum=np.cumsum(w_i/w)
+        #weightedMedian=np.argmin(np.abs(cumsum-0.5))
+        #binFs[i]=fs[inBin[argsort[weightedMedian]]]#np.median(fs[inBin])
+        binFs[i]=weightedMedian(fs[inBin],1/es[inBin])
+        #mad=1.4826*np.median(np.abs(fs[inBin]-binFs[i]))/np.sqrt(inBin.size)
+        mad=1.4826*weightedMedian(np.abs(fs[inBin]-binFs[i]),1/es[inBin])/np.sqrt(inBin.size)
+        #print(mad)
+        binEs[i]=mad#np.sqrt(mad**2 + np.median(es[inBin])**2)
+        #binEs[i]=np.sqrt(np.sum((binFs[i]-fs[inBin])**2))/np.sqrt(inBin.size)
     return binTs,binFs,binEs
+    
+
     
