@@ -4,27 +4,11 @@ import scipy.optimize
 import scipy.integrate
 import astropy.units as u
 import astropy
-#Gyr=3.925e8 #in Rsun, Msun and yrs
+
 G=astropy.constants.G #2946 #in Rsun, Msun and days
 h=astropy.constants.h
 k=astropy.constants.k_B
 c=astropy.constants.c
-#Rsun=6.96e8 #in m
-#Msun=2e30 #in kg
-#yr=3.15e7 #in seconds
-#day=86400 #in seconds
-
-#Mj=0.000954 #in Msun
-#Me=0.000003 #in Msun
-#Rj=0.10049  #in Rsun
-#Re=0.009158 #in Rsun
-
-#AU=214.94 #in Rsun
-
-#rUnit=1 #planet radii unit in rSun
-#mUnit=1 #planet mass unit in mSun
-#tUnit=1 #time unit in days
-#aUnit=1 #semi-major axis unit in rSun
 
 class system:
     def __init__(self):
@@ -51,6 +35,9 @@ class system:
         self.tPeri=0*u.d # time of periapse
         self.vPhi=0.5*np.pi # azimuthal projection angle (relative to periapse)
         self.vTheta=0.49*np.pi # polar projection angle (approx pi/2 for transiting planet)
+        
+        self.L=1
+        self.Lp=0.001
     
     # A series of functions to find (and set) parameters that can be derived from other known parameters (e.g. a <-> period) 
     # note: could include mass here - though technically will just give M+Mp - leaving out for now   
@@ -61,6 +48,12 @@ class system:
     def find_period(self):
         self.period=(2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))).to(u.d)
         return self.period
+    def update_Ls(self):
+        L=F(self.R,self.D,self.T)
+        Lp=F(self.Rp,self.D,self.Tp)
+        self.L=L/(L+Lp)
+        self.Lp=Lp/(L+Lp) # is this a sensible thing to normalise?
+        return L,Lp
     
     # General orbital parameters as a function of time
     # Note: eta is generally a more useful angle than Phi, but Phi is more easily understood (the angle from periapse of the planet relative to c.o.m.)
@@ -95,7 +88,7 @@ class system:
     # Finds eta for a given time (inverting t=(T/2pi)*(eta - e sin(eta)) )
     # note: currently using approximate solution to O(e^3) from Penoyre and Sandford 2018 - see OoT for exact solution
     def find_eta(self,t): #[raw units->unitless]
-        eta0=(t-pl.tp)*tUnit*np.sqrt((G*pl.M) / ((pl.a*aUnit)**3))
+        eta0=((t-self.tPeri)*np.sqrt(G*(self.M+self.Mp)/ self.a**3)).to(u.m/u.m).value
             #eta1=pl.e*np.sin(eta0)/(1-pl.e*np.cos(eta0))
         eta1=self.e*np.sin(eta0)
         eta2=(self.e**2)*np.sin(eta0)*np.cos(eta0)
@@ -111,18 +104,16 @@ class system:
         epsilon,epsilon_c=self.find_epsilons(t)
         delta=-(49+16*(self.beta**-1))*epsilon/40
         delta_c=-(49+16*(self.betap**-1))*epsilon_c/40
-        lum=1 # this is where we calculate the luminosity of the star and the companion
-        lum_c=0.001
-        return lum*delta + lum_c*delta_c
+        return self.L*delta + self.Lp*delta_c
         
     def find_vs(self,t): # Finds and returns the line of sight velocity of both objects
         v=find_v(self,t,self.M,self.vPhi)
         v_c=find_v(self,t,self.Mp,self.vPhi+np.pi)
         return v,v_c
     def find_dL_b(self,t): # The luminosity change of both the star and companion due to beaming
-        v,v_c=self.find_v(t)
+        v,v_c=self.find_vs(t)
         # need a good way of integrating over F_l over waveband of telescope
-        return
+        return 0
         
     def find_dL_r(self,t): # The reflected luminosity of both star and planet
         Phi=self.find_Phi(t)
@@ -131,13 +122,15 @@ class system:
         d=self.find_d(t)
         delta=self.Ag*np.power(self.Rp/d,2)*(np.sin(gamma)+(np.pi-gamma)*np.cos(gamma))
         delta_c=self.Agp*np.power(self.R/d,2)*(np.sin(gamma_c)+(np.pi-gamma_c)*np.cos(gamma_c))
-        lum=1
-        lum_c=0.001
-        return lum*delta + lum_c*delta_c
+        return self.L*delta + self.Lp*delta_c
+        
+    def lightcurve(self,t):
+        deltas=self.find_dL_t(t)+self.find_dL_b(t)+self.find_dL_r(t)
+        return 1+deltas
         
 # Finds the fractional radius variation at some angle (theta,phi) along the line of sight due to tides (epsilon = R/R0 - 1) for a particular body (can be star or companion)
 def find_epsilon(sys,t,beta,m,M,r,theta,phi):
-    eta=system.find_eta(t)
+    eta=sys.find_eta(t)
     alpha=beta*(m/M)*np.power(r/sys.a,3)/4
     gamma=alpha*np.power(1-sys.e*np.cos(eta),-3)
     Phi=sys.find_Phi(t)
@@ -152,6 +145,12 @@ def find_v(sys,t,M,vPhi):
     # this should have sign such that it's positive when moving away from the observer
     return v
     
-def F_l(R,D,T,l): # dF/dl at a given wavelength
-    return 2*np.pi*np.power(R/D,2)*(h*c**2/l**5)/(np.exp(h*c/(l*k*T))-1)
+def F_l(l,R,D,T): # dF/dl at a given wavelength
+    l=l*u.m
+    hc2_l5=(h*c**2/l**5).value
+    return (2*np.pi*np.power(R/D,2)*hc2_l5/(np.exp(h*c/(l*k*T))-1))
     
+def F(R,D,T): # currently inetgrating over a very rough kepler bandpass
+    lMin=420e-9
+    lMax=900e-9
+    return scipy.integrate.quad(F_l,lMin,lMax,args=(R,D,T))[0]*(u.J/(u.m**3 *u.s))
