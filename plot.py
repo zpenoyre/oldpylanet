@@ -67,7 +67,7 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     ootPlot.axvline(np.min(ts),c='grey',alpha=0.5)
     ootPlot.axvline(np.max(ts),c='grey',alpha=0.5)
     ootPlot.set_xlim(fullTs[0],fullTs[-1])
-    ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])-variance),1e6*(np.max(fs[nonTrans])+variance))
+    ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])-1.5*variance),1e6*(np.max(fs[nonTrans])+1.5*variance))
     ootPlot.axhline(0,c='grey',alpha=0.5)
     ootPlot.set_title('Out of Transit',fontsize=12)
     
@@ -77,7 +77,7 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     transitPlot.axhline(1,c='grey',alpha=0.5)
     transitPlot.set_xlim(-period/8,period/8)
     transitPlot.set_title(r'Transit ($\Phi=0$)',fontsize=12)
-    transitPlot.set_ylim(1e6*(np.min(fs)-fullVariance),1e6*(np.max(fs)+fullVariance))
+    transitPlot.set_ylim(1e6*(np.min(fs)-1.5*fullVariance),1e6*(np.max(fs)+1.5*fullVariance))
     
     secondaryPlot=plt.subplot(thisGrid[1,2])
     second=np.flatnonzero(np.abs(fullTs+(period/2))<period/8)
@@ -87,7 +87,7 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     secondaryPlot.axvline(np.min(ts),c='grey',alpha=0.5)
     secondaryPlot.axhline(1,c='grey',alpha=0.5)
     secondaryPlot.set_title(r'Secondary ($\Phi=\pi$)',fontsize=12)
-    secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])-variance),1e6*(np.max(fullFs[second])+variance))
+    secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])-1.5*variance),1e6*(np.max(fullFs[second])+1.5*variance))
     secondaryPlot.set_xlim(-(5/8)*period,-(3/8)*period)
     
 def plotModel(thisGrid,ts,fs,period=-1):
