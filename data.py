@@ -216,7 +216,7 @@ def downloadKepler(KIC, dataDirectory):
 
     return
 
-def getData(target, dataFolderPath, cadence="both", plot=True):
+def getData(target, dataFolderPath="./downloadData", cadence="both", plot=True):
     """Combines the functionality of download and readIn, below.
     Args:
         (float, int, or str): The target to download.
@@ -262,6 +262,6 @@ def getData(target, dataFolderPath, cadence="both", plot=True):
     if nDataFiles==0:
         downloadKepler(KIC, dataDirectory)
     
-    print("cadence is {0}".format(cadence))
+    #print("cadence is {0}".format(cadence))
     return keplerLC(KIC, dataDirectory, cadence)
 
