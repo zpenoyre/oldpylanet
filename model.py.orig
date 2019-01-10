@@ -20,7 +20,11 @@ class system:
         self.T=5000.*u.K # Tsun
         self.Tp=500.*u.K
     
+<<<<<<< HEAD
         self.a=0.1*u.AU # ~ orbit of mercury in Rsun
+=======
+        self.a=(20.*u.Rsun).to(u.AU) # ~ orbit of mercury in Rsun
+>>>>>>> 1ea3943d8f8295ea4be27ea1050fbdba571bf240
         self.e=0.01
         self.period=1.0*u.d # in days
         
@@ -43,8 +47,13 @@ class system:
     # A series of functions to find (and set) parameters that can be derived from other known parameters (e.g. a <-> period) 
     # note: could include mass here - though technically will just give M+Mp - leaving out for now   
     def find_a(self):
+<<<<<<< HEAD
+        period=2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))
+        self.a=(self.a*((self.period/period)**(2/3))).to(u.AU)
+=======
         period=(2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))).to(u.d)
         self.a=(self.a*(self.period/period)**(2./3.)).to(u.AU)
+>>>>>>> 1ea3943d8f8295ea4be27ea1050fbdba571bf240
         return self.a
     def find_period(self):
         self.period=(2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))).to(u.d)
@@ -103,9 +112,15 @@ class system:
         return epsilon,epsilon_c
     def find_dL_t(self,t): # The luminosity change of both the star and companion due to tides
         epsilon,epsilon_c=self.find_epsilons(t)
+<<<<<<< HEAD
         delta=-(49+16*(self.beta**-1))*epsilon/40
         delta_c=-(49+16*(self.betap**-1))*epsilon_c/40
         return (self.L*delta + self.Lp*delta_c)/(self.L+self.Lp)
+=======
+        delta=-(49.+16.*(self.beta**-1.))*epsilon/40.
+        delta_c=-(49.+16.*(self.betap**-1.))*epsilon_c/40.
+        return self.L*delta + self.Lp*delta_c
+>>>>>>> 1ea3943d8f8295ea4be27ea1050fbdba571bf240
         
     def find_vs(self,t): # Finds and returns the line of sight velocity of both objects
         v=find_v(self,t,self.M,self.vPhi)
@@ -113,6 +128,7 @@ class system:
         return v,v_c
     def find_dL_b(self,t): # The luminosity change of both the star and companion due to beaming
         v,v_c=self.find_vs(t)
+<<<<<<< HEAD
         ls,phis=windowFunction()
         l0s=ls/(1+(v/c))
         Fl0s=F_l(l0s,self.R,self.D,self.T)
@@ -123,6 +139,10 @@ class system:
         Delta_c=( (1-5*(v_c/c))*np.trapz(phis*Fl0s_c,x=ls) / self.Lp )-1
         
         return Delta+Delta_c
+=======
+        # need a good way of integrating over F_l over waveband of telescope
+        return 0.
+>>>>>>> 1ea3943d8f8295ea4be27ea1050fbdba571bf240
         
     def find_dL_r(self,t): # The reflected luminosity of both star and planet
         Phi=self.find_Phi(t)
@@ -160,6 +180,7 @@ def F_l(l,R,D,T): # dF/dl at a given wavelength
     return (2.*np.pi*np.power(R/D,2)*hc2_l5/(np.exp(h*c/(l*k*T))-1.))
     
 def F(R,D,T): # currently inetgrating over a very rough kepler bandpass
+<<<<<<< HEAD
     #ls=keplerResponseLambda[:]
     #window=keplerResponseFunction[:]
     ls,phis=windowFunction()
@@ -193,3 +214,8 @@ def windowFunction(nPoints=36):
     
     
     
+=======
+    lMin=420.e-9
+    lMax=900.e-9
+    return scipy.integrate.quad(F_l,lMin,lMax,args=(R,D,T))[0]*(u.J/(u.m**3 *u.s))
+>>>>>>> 1ea3943d8f8295ea4be27ea1050fbdba571bf240

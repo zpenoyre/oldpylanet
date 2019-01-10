@@ -230,7 +230,6 @@ def getData(target, dataFolderPath, cadence="both", plot=True):
         cadence ("short","long","both"): Read in only short-cadence data,
             only long-cadence data, or both?
         plot (bool): Plot the read-in data, or no?
-
     """
 
     client = kplr.API()
@@ -545,6 +544,4 @@ def stackData(ts,fs,es,period,nTs=100,offset=0.1234):
         binEs[i]=mad#np.sqrt(mad**2 + np.median(es[inBin])**2)
         #binEs[i]=np.sqrt(np.sum((binFs[i]-fs[inBin])**2))/np.sqrt(inBin.size)
     return binTs,binFs,binEs
-    
-
     
