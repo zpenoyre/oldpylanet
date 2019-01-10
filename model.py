@@ -19,7 +19,7 @@ class system:
         self.T=5000*u.K # Tsun
         self.Tp=500*u.K
     
-        self.a=20*u.Rsun # ~ orbit of mercury in Rsun
+        self.a=0.1*u.AU # ~ orbit of mercury in Rsun
         self.e=0.01
         self.period=1*u.d # in days
         
@@ -43,7 +43,7 @@ class system:
     # note: could include mass here - though technically will just give M+Mp - leaving out for now   
     def find_a(self):
         period=2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))
-        self.a=(self.a*(period/self.period)**(2/3)).to(u.AU)
+        self.a=(self.a*((self.period/period)**(2/3))).to(u.AU)
         return self.a
     def find_period(self):
         self.period=(2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))).to(u.d)
@@ -51,8 +51,8 @@ class system:
     def update_Ls(self):
         L=F(self.R,self.D,self.T)
         Lp=F(self.Rp,self.D,self.Tp)
-        self.L=L/(L+Lp)
-        self.Lp=Lp/(L+Lp) # is this a sensible thing to normalise?
+        self.L=L
+        self.Lp=Lp
         return L,Lp
     
     # General orbital parameters as a function of time
@@ -104,7 +104,7 @@ class system:
         epsilon,epsilon_c=self.find_epsilons(t)
         delta=-(49+16*(self.beta**-1))*epsilon/40
         delta_c=-(49+16*(self.betap**-1))*epsilon_c/40
-        return self.L*delta + self.Lp*delta_c
+        return (self.L*delta + self.Lp*delta_c)/(self.L+self.Lp)
         
     def find_vs(self,t): # Finds and returns the line of sight velocity of both objects
         v=find_v(self,t,self.M,self.vPhi)
@@ -112,8 +112,16 @@ class system:
         return v,v_c
     def find_dL_b(self,t): # The luminosity change of both the star and companion due to beaming
         v,v_c=self.find_vs(t)
-        # need a good way of integrating over F_l over waveband of telescope
-        return 0
+        ls,phis=windowFunction()
+        l0s=ls/(1+(v/c))
+        Fl0s=F_l(l0s,self.R,self.D,self.T)
+        Delta=( (1-5*(v/c))*np.trapz(phis*Fl0s,x=ls) / self.L )-1
+        
+        l0s_c=ls/(1+(v_c/c))
+        Fl0s_c=F_l(l0s,self.Rp,self.D,self.Tp)
+        Delta_c=( (1-5*(v_c/c))*np.trapz(phis*Fl0s_c,x=ls) / self.Lp )-1
+        
+        return Delta+Delta_c
         
     def find_dL_r(self,t): # The reflected luminosity of both star and planet
         Phi=self.find_Phi(t)
@@ -122,7 +130,7 @@ class system:
         d=self.find_d(t)
         delta=self.Ag*np.power(self.Rp/d,2)*(np.sin(gamma)+(np.pi-gamma)*np.cos(gamma))
         delta_c=self.Agp*np.power(self.R/d,2)*(np.sin(gamma_c)+(np.pi-gamma_c)*np.cos(gamma_c))
-        return self.L*delta + self.Lp*delta_c
+        return (self.L*delta + self.Lp*delta_c)/(self.L+self.Lp)
         
     def lightcurve(self,t):
         deltas=self.find_dL_t(t)+self.find_dL_b(t)+self.find_dL_r(t)
@@ -151,6 +159,36 @@ def F_l(l,R,D,T): # dF/dl at a given wavelength
     return (2*np.pi*np.power(R/D,2)*hc2_l5/(np.exp(h*c/(l*k*T))-1))
     
 def F(R,D,T): # currently inetgrating over a very rough kepler bandpass
-    lMin=420e-9
-    lMax=900e-9
-    return scipy.integrate.quad(F_l,lMin,lMax,args=(R,D,T))[0]*(u.J/(u.m**3 *u.s))
+    #ls=keplerResponseLambda[:]
+    #window=keplerResponseFunction[:]
+    ls,phis=windowFunction()
+    Fls=F_l(ls,R,D,T)
+    return np.trapz(phis*Fls,x=ls)
+    #lMin=420e-9
+    #lMax=900e-9
+#    return scipy.integrate.quad(F_l,lMin,lMax,args=(R,D,T))[0]*(u.J/(u.m**3 *u.s))
+
+
+# Below functions for finding the response function of the telescope in a computable format
+
+def interpolateYs(xs,ys,trapXs): #assumes xs in ascending order!
+    diffs=np.array([trapX-xs for trapX in trapXs])
+    diffs[diffs<0]=100 # want to make sure we always get the low index
+    lowIndex=np.argmin(diffs,axis=1)
+    below=trapXs-xs[lowIndex]
+    if (np.max(lowIndex)==xs.size-1) | (xs[np.min(lowIndex)]<xs[0]):
+        return np.inf*np.ones_like(trapXs) # can break if tryinging to sample xs beyond the recorded data
+    above=xs[lowIndex+1]-trapXs
+    intYs=ys[lowIndex]+(below/(below+above))*(ys[lowIndex+1]-ys[lowIndex])
+    return intYs
+
+def windowFunction(nPoints=36):
+    digitize=ascii.read('responseFunctions/keplerDigitize.csv')
+    ls=digitize['x']
+    phis=digitize['responseFunction']
+    xs=np.linspace(xs[0],xs[-1],nPoints)
+    ys=interpolateYs(ls,phis,xs)
+    return xs,ys
+    
+    
+    
