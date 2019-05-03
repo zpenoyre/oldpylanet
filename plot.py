@@ -1,3 +1,4 @@
+from __future__ import division, print_function
 import numpy as np
 import matplotlib as mpl 
 import matplotlib.pyplot as plt 
@@ -28,13 +29,14 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     darkBlue='#05668D'
     lightBlue='#427AA1'
     offWhite='#EBF2FA'
+
+    if period==-1:
+        period=np.max(ts)-np.min(ts) #almost true...
     
     # finds minimum data point and assumes it;s the transit middle
     offset=ts[np.argmin(fs)]
     ts=(ts-offset+period/2)%period - period/2 
     
-    if period==-1:
-        period=np.max(ts)-np.min(ts) #almost true...
     sort=np.argsort(ts)
     nTs=sort.size
     
@@ -67,7 +69,11 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     ootPlot.axvline(np.min(ts),c='grey',alpha=0.5)
     ootPlot.axvline(np.max(ts),c='grey',alpha=0.5)
     ootPlot.set_xlim(fullTs[0],fullTs[-1])
-    ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])-1.5*variance),1e6*(np.max(fs[nonTrans])+1.5*variance))
+    try:
+        ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])-1.5*variance),1e6*(np.max(fs[nonTrans])+1.5*variance))
+    except ValueError:
+        ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])),1e6*(np.max(fs[nonTrans])))
+    
     ootPlot.axhline(0,c='grey',alpha=0.5)
     ootPlot.set_title('Out of Transit',fontsize=12)
     
@@ -77,7 +83,10 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     transitPlot.axhline(1,c='grey',alpha=0.5)
     transitPlot.set_xlim(-period/8,period/8)
     transitPlot.set_title(r'Transit ($\Phi=0$)',fontsize=12)
-    transitPlot.set_ylim(1e6*(np.min(fs)-1.5*fullVariance),1e6*(np.max(fs)+1.5*fullVariance))
+    try:
+        transitPlot.set_ylim(1e6*(np.min(fs)-1.5*fullVariance),1e6*(np.max(fs)+1.5*fullVariance))
+    except ValueError:
+        transitPlot.set_ylim(1e6*(np.min(fs)),1e6*(np.max(fs)))
     
     secondaryPlot=plt.subplot(thisGrid[1,2])
     second=np.flatnonzero(np.abs(fullTs+(period/2))<period/8)
@@ -87,12 +96,26 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     secondaryPlot.axvline(np.min(ts),c='grey',alpha=0.5)
     secondaryPlot.axhline(1,c='grey',alpha=0.5)
     secondaryPlot.set_title(r'Secondary ($\Phi=\pi$)',fontsize=12)
-    secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])-1.5*variance),1e6*(np.max(fullFs[second])+1.5*variance))
+    try:
+        secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])-1.5*variance),1e6*(np.max(fullFs[second])+1.5*variance))
+    except ValueError:
+        secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])),1e6*(np.max(fullFs[second])))
+    
     secondaryPlot.set_xlim(-(5/8)*period,-(3/8)*period)
     
 def plotModel(thisGrid,ts,fs,period=-1):
     if period==-1:
         period=np.max(ts)-np.min(ts)
+
+    offset=ts[np.argmin(fs)]
+    ts=(ts-offset+period/2)%period - period/2
+
+    sort=np.argsort(ts)
+    nTs=sort.size
+
+    ts=ts[sort]
+    fs=fs[sort]
+
     fullTs=np.hstack([ts[-32:]-period,ts,period+ts[:32]])
     fullFs=np.hstack([fs[-32:],fs,fs[:32]])
     mainPlot=plt.subplot(thisGrid[0,0:2])
