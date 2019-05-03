@@ -72,8 +72,9 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     try:
         ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])-1.5*variance),1e6*(np.max(fs[nonTrans])+1.5*variance))
     except ValueError:
-        ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])),1e6*(np.max(fs[nonTrans])))
-    
+        #ootPlot.set_ylim(1e6*(np.min(fs[nonTrans])),1e6*(np.max(fs[nonTrans])))
+        pass
+
     ootPlot.axhline(0,c='grey',alpha=0.5)
     ootPlot.set_title('Out of Transit',fontsize=12)
     
@@ -86,7 +87,8 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     try:
         transitPlot.set_ylim(1e6*(np.min(fs)-1.5*fullVariance),1e6*(np.max(fs)+1.5*fullVariance))
     except ValueError:
-        transitPlot.set_ylim(1e6*(np.min(fs)),1e6*(np.max(fs)))
+        #transitPlot.set_ylim(1e6*(np.min(fs)),1e6*(np.max(fs)))
+        pass
     
     secondaryPlot=plt.subplot(thisGrid[1,2])
     second=np.flatnonzero(np.abs(fullTs+(period/2))<period/8)
@@ -99,7 +101,8 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     try:
         secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])-1.5*variance),1e6*(np.max(fullFs[second])+1.5*variance))
     except ValueError:
-        secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])),1e6*(np.max(fullFs[second])))
+        #secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])),1e6*(np.max(fullFs[second])))
+        pass
     
     secondaryPlot.set_xlim(-(5/8)*period,-(3/8)*period)
     
