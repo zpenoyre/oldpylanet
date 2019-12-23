@@ -337,7 +337,6 @@ def cleanGaps(ts,fs,es,nMin=0):
         fs=[fs]
         es=[es]
         nPeriods=1
-    #print(ts)
     times=[]
     fluxs=[]
     errors=[]
@@ -351,7 +350,7 @@ def cleanGaps(ts,fs,es,nMin=0):
         gaps=np.flatnonzero(~np.isfinite(theseTs+theseFs+theseEs)) # if any of the three is NaN this will give their indices
         gaps=np.hstack([0,gaps,nPoints]) # adds in 0 and N as boundaries
         skips=gaps[1:]-gaps[:-1] # where this equals 1 we have multiple skipped data points concurrently (i.e. a true gap)
-        #print('skips: ',skips)
+
         singles=gaps[np.flatnonzero(skips>1)[1:]]
         # where there is just one bad data point we just average the two either side
         theseTs[singles]=0.5*(theseTs[singles+1] + theseTs[singles-1])
@@ -360,18 +359,13 @@ def cleanGaps(ts,fs,es,nMin=0):
 
         jumps=np.flatnonzero((skips[1:]==1) & (skips[:-1]!=1))+1 #first nan in a long string of nans
         endJumps=np.flatnonzero((skips[:-1]==1) & (skips[1:]!=1))+1 #last nan in a long string of nans
-        #print('jumps: ',jumps)
-        #print('endJumps: ',endJumps)
-        #print(gaps[jumps])
-        #print(gaps[endJumps])
+
         if jumps.size==0: # no big jumps to cut output
             times.append(theseTs)
             fluxs.append(theseFs)
             errors.append(theseEs)
         else:
             for j in range(jumps.size+1):
-                #print('j: ',j)
-                #print('of ',jumps.size+1)
                 if j==0:
                     lowEnd=0
                     while ~np.isfinite(theseTs[lowEnd]+theseFs[lowEnd]+theseEs[lowEnd]):
@@ -386,9 +380,6 @@ def cleanGaps(ts,fs,es,nMin=0):
                     highEnd=gaps[jumps[j]] # end one before the next jump starts
                 if (highEnd-lowEnd)<nMin:
                     continue
-                #print('lowEnd: ',lowEnd)
-                #print('highEnd: ',highEnd)
-                #print('sum: ',np.sum(theseTs[lowEnd:highEnd]))
                 times.append(theseTs[lowEnd:highEnd])
                 fluxs.append(theseFs[lowEnd:highEnd])
                 errors.append(theseEs[lowEnd:highEnd])
@@ -474,9 +465,7 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1, alpha=np.sqrt(3))
         if nObs<windowSize+1:
             return np.array([]),np.array([]),np.array([])
         ts=times[windowWidth:-windowWidth]
-        #fs=fluxs[windowWidth:-windowWidth]
         es=errors[windowWidth:-windowWidth]
-
         fs=0.5*(fluxs[:-windowSize+1]+fluxs[windowSize-1:])
 
         return ts,fs,es
@@ -486,45 +475,21 @@ def detrend(times,fluxs,errors,period,method='box',cadence=-1, alpha=np.sqrt(3))
         windowWidth=int(windowSize/2)
         if nObs<windowSize:
             return np.array([]),np.array([]),np.array([])
-        #weights=np.ones(windowSize)/windowSize
-        #ts=times[windowWidth:-windowWidth]
-        #fs=fluxs[windowWidth:-windowWidth]
-        #es=errors[windowWidth:-windowWidth]
-        #indices=np.zeros((windowSize,nObs-windowSize))
-        #for i in range(nObs-windowSize):
-    #        indices[:,i]=np.arange(i,i+windowSize)
-        #print(indices)
-        #vdsfv
-        indices=np.array([np.arange(i,i+windowSize) for i in range(nObs-windowSize)])
-        #nljk
-        fStacks=fluxs[indices]
-        #print('fStacks ',fStacks)
-        fSort=np.sort(fStacks,axis=1)
-        #print('fSort ',fSort)
-        fMeans=np.mean(fSort[:,int(0.05*windowSize):int(0.95*windowSize)],axis=1)
-        #fMeans=np.mean(fStacks,axis=1)
-        #print('fMeans ',fMeans)
 
-        #import matplotlib.pyplot as plt
-        #plt.plot(fluxs)
-        #plt.show()
-        #plt.plot(fMeans)
-        #plt.show()
+        indices=np.array([np.arange(i,i+windowSize) for i in range(nObs-windowSize)])
+        fStacks=fluxs[indices]
+        fSort=np.sort(fStacks,axis=1)
+        fMeans=np.mean(fSort[:,int(0.05*windowSize):int(0.95*windowSize)],axis=1)
 
         ts=times[windowWidth:windowWidth+nObs-windowSize]
         es=errors[windowWidth:windowWidth+nObs-windowSize]
         fs=fluxs[windowWidth:windowWidth+nObs-windowSize]-fMeans
 
-        #plt.plot(fs)
-        #plt.show()
-
-        #print(fMeans.shape)
-        #print(indices.shape)
         return ts,fs,es
 
 def cleanData(ts,fs,es,period,nMin=1000,cadence=-1,detrendMethod='box'):
     times,fluxs,errors=cleanGaps(ts,fs,es,nMin=nMin)
-    #times,fluxs,errors=cleanJumps(times,fluxs,errors)
+
     nPeriods=len(times)
     allTs=np.array([])
     allFs=np.array([])
@@ -535,9 +500,6 @@ def cleanData(ts,fs,es,period,nMin=1000,cadence=-1,detrendMethod='box'):
         allTs=np.hstack([allTs,pTs])
         allFs=np.hstack([allFs,pFs])
         allEs=np.hstack([allEs,pEs])
-    #medianFs=np.median(allFs)
-    #allFs=(allFs/medianFs)-1
-    #allEs=allEs/medianFs
     return allTs,allFs,allEs
 
 def convolve(times,fluxs,errors,weights):
@@ -547,8 +509,6 @@ def convolve(times,fluxs,errors,weights):
     fs=fluxs[width:-width]
     es=errors[width:-width]
     fMeds=loop(fluxs,weights)#np.zeros(nObs-2*width)
-    #for i in range(nObs-2*width):
-    #    fMeds[i]=weightedMedian(fluxs[i:i+2*width+1],weights)
     return ts,fs-fMeds,es
 
 @jit(nopython=True)
@@ -571,25 +531,13 @@ def stackData(ts,fs,es,period,nTs=100,offset=0.1234):
     binTs=np.linspace(-(period-dt)/2,(period-dt)/2,nTs)
     binFs=np.zeros(nTs)
     binEs=np.zeros(nTs)
-    #if offset==0.1234:
-    #    offset=ts[np.argmin(fs)]
     for i in range(nTs):
-        #inBin=np.flatnonzero(np.abs(((ts+(period/2)-offset)%period - period/2)-binTs[i])<dt/2)
         inBin=np.flatnonzero(np.abs(((ts+(period/2))%period - period/2)-binTs[i])<dt/2)
-        #print(inBin.size,' points in bin ',i)
         if inBin.size==0:
             continue
-        #argsort=np.argsort(fs[inBin])
-        #w=np.sum(1/es[inBin])
-        #w_i=1/es[inBin[argsort]]
-        #cumsum=np.cumsum(w_i/w)
-        #weightedMedian=np.argmin(np.abs(cumsum-0.5))
-        #binFs[i]=fs[inBin[argsort[weightedMedian]]]#np.median(fs[inBin])
         weights=(1/es[inBin])/np.sum(1/es[inBin])
         binFs[i]=weightedMedian(fs[inBin],weights)
-        #mad=1.4826*np.median(np.abs(fs[inBin]-binFs[i]))/np.sqrt(inBin.size)
-        mad=1.4826*weightedMedian(np.abs(fs[inBin]-binFs[i]),weights)/np.sqrt(inBin.size)
-        binEs[i]=mad#np.sqrt(mad**2 + np.median(es[inBin])**2)
-        #binEs[i]=np.sqrt(np.sum((binFs[i]-fs[inBin])**2))/np.sqrt(inBin.size)
+        mad=weightedMedian(np.abs(fs[inBin]-binFs[i]),weights)/np.sqrt(inBin.size)
+        binEs[i]=1.4826*mad#np.sqrt(mad**2 + np.median(es[inBin])**2)
     binFs=binFs-np.median(binFs)
     return binTs,binFs,binEs
