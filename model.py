@@ -5,11 +5,15 @@ import scipy.optimize
 import scipy.integrate
 import astropy.units as u
 import astropy
+from astropy.io import ascii
+import os
+import inspect
 
 G=astropy.constants.G #2946 #in Rsun, Msun and days
 h=astropy.constants.h
 k=astropy.constants.k_B
 c=astropy.constants.c
+sigma=astropy.constants.sigma_sb
 
 class system:
     def __init__(self):
@@ -37,11 +41,13 @@ class system:
         self.vPhi=0.5*np.pi # azimuthal projection angle (relative to periapse)
         self.vTheta=0.49*np.pi # polar projection angle (approx pi/2 for transiting planet)
         
-        self.L=1.
-        self.Lp=0.001
+        self.L=1.*u.Lsun
+        self.Lp=0.001*u.Lsun
+        # these are the effective luminosities given the filter (< actual luminosity)
+        self._Lobs=1.*u.Lsun
+        self._Lpobs=0.001*u.Lsun
     
-    # A series of functions to find (and set) parameters that can be derived from other known parameters (e.g. a <-> period) 
-    # note: could include mass here - though technically will just give M+Mp - leaving out for now   
+    # A series of functions to find (and set) parameters that can be derived from other known parameters (e.g. a <-> period)   
     def find_a(self):
         period=(2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))).to(u.d)
         self.a=(self.a*(self.period/period)**(2./3.)).to(u.AU)
@@ -49,11 +55,23 @@ class system:
     def find_period(self):
         self.period=(2*np.pi*np.sqrt(self.a**3/(G*(self.M+self.Mp)))).to(u.d)
         return self.period
+    def find_mass(self,massFactor=1e-3): # as we can only directly calculate M+Mp uses a defined mass factor to set the relative masses
+        totalMass=4*(np.pi**2)*(self.a**3)/(G*self.period**2)
+        self.M=totalMass/(1*massFactor)
+        self.Mp=massFactor*totalMass/(1*massFactor)
+        return self.M,self.Mp
+        
     def update_Ls(self):
-        L=F(self.R,self.D,self.T)
-        Lp=F(self.Rp,self.D,self.Tp)
-        self.L=L
-        self.Lp=Lp
+        L=Luminosity(self.R,self.T).to(u.Lsun)
+        #Lsun=Luminosity(1.*u.Rsun,5780.*u.K).to(u.Lsun)
+        #print('L: ',L.to(u.Lsun))
+        #print('Lsun: ',Lsun)
+        #print('direct: ',(4*np.pi*sigma*(1.*u.Rsun)**2*(5780.*u.K)**4).to(u.Lsun))
+        Lp=Luminosity(self.Rp,self.Tp)
+        self.L=4*np.pi*sigma*(self.R**2)*(self.T**4)
+        self.Lp=4*np.pi*sigma*(self.Rp**2)*(self.Tp**4)
+        self._Lobs=L.to(u.Lsun)
+        self._Lpobs=Lp.to(u.Lsun)
         return L,Lp
     
     # General orbital parameters as a function of time
@@ -105,33 +123,50 @@ class system:
         epsilon,epsilon_c=self.find_epsilons(t)
         delta=-(49+16*(self.beta**-1))*epsilon/40
         delta_c=-(49+16*(self.betap**-1))*epsilon_c/40
-        return (self.L*delta + self.Lp*delta_c)/(self.L+self.Lp)
+        return (self._Lobs*delta + self._Lpobs*delta_c)/(self._Lobs+self._Lpobs)
         
     def find_vs(self,t): # Finds and returns the line of sight velocity of both objects
-        v=find_v(self,t,self.M,self.vPhi)
-        v_c=find_v(self,t,self.Mp,self.vPhi+np.pi)
+        v_c=find_v(self,t,self.M,self.vPhi)
+        v=find_v(self,t,self.Mp,self.vPhi+np.pi)
         return v,v_c
     def find_dL_b(self,t): # The luminosity change of both the star and companion due to beaming
+        #print('beaming')
         v,v_c=self.find_vs(t)
+        #print('v: ',(v/c).to(u.m/u.m))
+        #print('v_c: ',(v_c/c).to(u.m/u.m))
         ls,phis=windowFunction()
-        l0s=ls/(1+(v/c))
-        Fl0s=F_l(l0s,self.R,self.D,self.T)
-        Delta=( (1-5*(v/c))*np.trapz(phis*Fl0s,x=ls) / self.L )-1
+        #print('phi.s: ',phis.shape)
+        l0s=np.array([l/(1+(v/c)) for l in ls])*u.m
+        #print('l0s: ',l0s)
+        intensity=I_l(l0s,self.T)
+        product=np.multiply(phis,intensity.T).T
+        Ls=4 * np.pi**2 * self.R**2 * np.trapz(product,dx=ls[1]-ls[0],axis=0)
+        #print('Ls.s: ',Ls.shape)
+        Delta=(1-5*(v/c))*Ls
+        #Delta=(1-4*(v/c))*self._Lobs
+        #print('Delta.s: ',Delta.shape)
         
-        l0s_c=ls/(1+(v_c/c))
-        Fl0s_c=F_l(l0s,self.Rp,self.D,self.Tp)
-        Delta_c=( (1-5*(v_c/c))*np.trapz(phis*Fl0s_c,x=ls) / self.Lp )-1
+        l0s_c=np.array([l/(1+(v/c)) for l in ls])
+        #Fl0s_c=F_l(l0s,self.Rp,self.D,self.Tp)
+        #product_c=np.multiply(phis,Fl0s_c.T).T
+        #Ls_c=np.trapz(product_c,dx=ls[1]-ls[0],axis=0)
+        intensity_c=I_l(l0s,self.Tp)
+        product_c=np.multiply(phis,intensity_c.T).T
+        Ls_c=4 * np.pi**2 * self.Rp**2 * np.trapz(product_c,dx=ls[1]-ls[0],axis=0)
         
-        return Delta+Delta_c
+        Delta_c=(1-5*(v_c/c))*Ls_c
+        #Delta_c=( (1-5*(v_c/c))*np.trapz(phis*Fl0s_c,x=ls) / self.Lp )-1
+        #return np.zeros(t.size)
+        return (Delta+Delta_c) / (self._Lobs+self._Lpobs) - 1
         
     def find_dL_r(self,t): # The reflected luminosity of both star and planet
         Phi=self.find_Phi(t)
         gamma=np.arccos(-np.sin(self.vTheta)*np.cos(self.vPhi-Phi))
         gamma_c=np.arccos(-np.sin(self.vTheta)*np.cos(self.vPhi+np.pi-Phi))
         d=self.find_d(t)
-        delta=self.Ag*np.power(self.Rp/d,2)*(np.sin(gamma)+(np.pi-gamma)*np.cos(gamma))
-        delta_c=self.Agp*np.power(self.R/d,2)*(np.sin(gamma_c)+(np.pi-gamma_c)*np.cos(gamma_c))
-        return (self.L*delta + self.Lp*delta_c)/(self.L+self.Lp)
+        delta=self.Agp*np.power(self.Rp/d,2)*(np.sin(gamma)+(np.pi-gamma)*np.cos(gamma))/np.pi
+        delta_c=self.Ag*np.power(self.R/d,2)*(np.sin(gamma_c)+(np.pi-gamma_c)*np.cos(gamma_c))/np.pi
+        return (self._Lobs*delta + self._Lpobs*delta_c)/(self._Lobs+self._Lpobs)
         
     def lightcurve(self,t):
         deltas=self.find_dL_t(t)+self.find_dL_b(t)+self.find_dL_r(t)
@@ -154,17 +189,16 @@ def find_v(sys,t,M,vPhi):
     # this should have sign such that it's positive when moving away from the observer
     return v
     
-def F_l(l,R,D,T): # dF/dl at a given wavelength
-    l=l*u.m
-    hc2_l5=(h*c**2/l**5).value
-    return (2.*np.pi*np.power(R/D,2)*hc2_l5/(np.exp(h*c/(l*k*T))-1.))
+def I_l(l,T): # dF/dl at a given wavelength
+    #print('exp: ',h*c/(l*k*T))
+    hc2_l5=(h*c**2/l**5)
+    #print(hc2_l5)
+    return 2*hc2_l5/(np.exp(h*c/(l*k*T))-1.)
     
-def F(R,D,T): # currently inetgrating over a very rough kepler bandpass
-    #ls=keplerResponseLambda[:]
-    #window=keplerResponseFunction[:]
-    ls,phis=windowFunction()
-    Fls=F_l(ls,R,D,T)
-    return np.trapz(phis*Fls,x=ls)
+def Luminosity(R,T,nPoints=36,window='kepler'): # currently inetgrating over a very rough kepler bandpass
+    ls,phis=windowFunction(nPoints=nPoints,window=window)
+    intensity=I_l(ls,T)
+    return (4 * np.pi**2 * R**2 * np.trapz(phis*intensity,dx=ls[1]-ls[0])).to(u.Lsun)
     #lMin=420e-9
     #lMax=900e-9
 #    return scipy.integrate.quad(F_l,lMin,lMax,args=(R,D,T))[0]*(u.J/(u.m**3 *u.s))
@@ -176,19 +210,28 @@ def interpolateYs(xs,ys,trapXs): #assumes xs in ascending order!
     diffs=np.array([trapX-xs for trapX in trapXs])
     diffs[diffs<0]=100 # want to make sure we always get the low index
     lowIndex=np.argmin(diffs,axis=1)
+    lowIndex[lowIndex==xs.size-1]=xs.size-2
     below=trapXs-xs[lowIndex]
-    if (np.max(lowIndex)==xs.size-1) | (xs[np.min(lowIndex)]<xs[0]):
-        return np.inf*np.ones_like(trapXs) # can break if tryinging to sample xs beyond the recorded data
+    #if (np.max(lowIndex)==xs.size-1) | (xs[np.min(lowIndex)]<xs[0]):
+    #    return np.inf*np.ones_like(trapXs) # can break if tryinging to sample xs beyond the recorded data
     above=xs[lowIndex+1]-trapXs
     intYs=ys[lowIndex]+(below/(below+above))*(ys[lowIndex+1]-ys[lowIndex])
+    intYs[intYs<0]=0 # interpolation may take some values into the negative
     return intYs
 
-def windowFunction(nPoints=36):
-    digitize=ascii.read('responseFunctions/keplerDigitize.csv')
-    ls=digitize['x']
-    phis=digitize['responseFunction']
-    xs=np.linspace(xs[0],xs[-1],nPoints)
-    ys=interpolateYs(ls,phis,xs)
+
+def windowFunction(nPoints=36,window='kepler'):
+    if window=='uniform':
+        xs=np.linspace(100,2000,nPoints)*1e-9*u.m
+        ys=np.ones(nPoints)
+        return xs,ys
+    thisDir=os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+    if window=='kepler':
+        digitize=ascii.read(thisDir+'/responseFunctions/keplerDigitize.csv')
+        ls=digitize['x']*u.m
+        phis=digitize['responseFunction']
+        xs=np.linspace(ls[0],ls[-1],nPoints)
+        ys=interpolateYs(ls,phis,xs)
     return xs,ys
     
     
