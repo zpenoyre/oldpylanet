@@ -35,7 +35,7 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
 
     # finds minimum data point and assumes it;s the transit middle
     offset=ts[np.argmin(fs)]
-    ts=(ts-offset+period/2)%period - period/2 
+    ts=(ts-offset+period/2)%period - period/2
     sort=np.argsort(ts)
     nTs=sort.size
 
@@ -101,7 +101,7 @@ def plotData(thisGrid,ts,fs,es,period=-1,c='#05668D'): #wants a 3x2 grid to plot
     except ValueError:
         #secondaryPlot.set_ylim(1e6*(np.min(fullFs[second])),1e6*(np.max(fullFs[second])))
         pass
-    
+
     secondaryPlot.set_xlim(-(5/8)*period,-(3/8)*period)
     return offset
 
