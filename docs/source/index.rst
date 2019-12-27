@@ -1,19 +1,21 @@
 Welcome to pylanet's documentation!
 ===================================
-.. automodule:: pylanet.model
-   :members:
+..
+  .. automodule:: model
+     :members:
 
-.. automodule:: pylanet.plot
-   :members:
+  .. automodule:: plot
+     :members:
 
-.. automodule:: pylanet.setup
+  .. automodule:: data
+     :members:
+
+.. automodule:: testDocs
    :members:
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
-
-
 
 Indices and tables
 ==================
