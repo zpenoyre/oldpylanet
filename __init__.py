@@ -1,4 +1,6 @@
-__all__ = ['getKeplerData','model']
+__all__ = ['data','model','plot','testDocs']
 
-from .getKeplerData import *
+from .data import *
 from .model import *
+from .plot import *
+from .testDocs import *
